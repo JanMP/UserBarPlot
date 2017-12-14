@@ -1,47 +1,77 @@
 <template lang="jade">
-.spin-container(v-if="!$subReady.userStatistics")
-  Spin(size="large" fix)
-svg(v-else width="100%" height="100%" v-bind:viewBox="chartData.viewBox" preserveAspectRatio="none")
+svg(width="100%" v-bind:viewBox="chartData.viewBox")
   g(v-bind:transform="chartData.coordinateTransform")
     g
-      rect.nothing(
-        x=-10
-        y=-1000
-        v-bind:width="daysCharted*dayWidth+20"
-        v-bind:height="silverAnswers*answerHeight+1000"
+      rect.nothing.animated(
+        v-bind:x="-margin"
+        y=-100
+        v-bind:width="daysCharted*chartData.dayWidth+2*margin"
+        v-bind:height="silverAnswers*chartData.answerHeight+100"
       )
-      rect.bronze(
-        x=-10
-        v-bind:y="bronzeAnswers*answerHeight"
-        v-bind:width="daysCharted*dayWidth+20"
-        v-bind:height="(silverAnswers-bronzeAnswers)*answerHeight"
+      rect.bronze.animated(
+        v-bind:x="-margin"
+        v-bind:y="bronzeAnswers*chartData.answerHeight"
+        v-bind:width="daysCharted*chartData.dayWidth+2*margin"
+        v-bind:height="(silverAnswers-bronzeAnswers)*chartData.answerHeight"
       )
-      rect.silver(
-        x=-10
-        v-bind:y="silverAnswers*answerHeight"
-        v-bind:width="daysCharted*dayWidth+20"
-        v-bind:height="(goldAnswers-silverAnswers)*answerHeight"
+      text.animated(
+        font-size=10
+        dy=-2
+        fill="white"
+        v-bind:transform="textTransform(10, bronzeAnswers*chartData.answerHeight)"
+      ) {{$t('bronze')}}
+      rect.silver.animated(
+        v-bind:x="-margin"
+        v-bind:y="silverAnswers*chartData.answerHeight"
+        v-bind:width="daysCharted*chartData.dayWidth+2*margin"
+        v-bind:height="(goldAnswers-silverAnswers)*chartData.answerHeight"
       )
-      rect.gold(
-        x=-10
-        v-bind:y="goldAnswers*answerHeight"
-        v-bind:width="daysCharted*dayWidth+20"
-        v-bind:height="(goldAnswers+1000)*answerHeight"
+      text.animated(
+        font-size=10
+        dy=-2
+        fill="white"
+        v-bind:transform="textTransform(10, silverAnswers*chartData.answerHeight)"
+      ) {{$t('silver')}}
+      rect.gold.animated(
+        v-bind:x="-margin"
+        v-bind:y="goldAnswers*chartData.answerHeight"
+        v-bind:width="daysCharted*chartData.dayWidth+2*margin"
+        v-bind:height="(goldAnswers+1000)*chartData.answerHeight"
       )
+      text.animated(
+        font-size=10
+        dy=-2
+        fill="white"
+        v-bind:transform="textTransform(10, goldAnswers*chartData.answerHeight)"
+      ) {{$t('gold')}}
     g(v-for="bar in chartData.bars")
-      line.bar.success.stroke(
-        v-bind:x1="bar.x"
-        y1=0
-        v-bind:x2="bar.x"
-        v-bind:y2="bar.y1Red"
+      rect.success.fill.animated(
+        v-bind:x="bar.x"
+        y=0
+        v-bind:width="chartData.dayWidth"
+        v-bind:height="bar.greenHeight"
       )
-      line.bar.error.stroke(
-        v-bind:x1="bar.x"
-        v-bind:y1="bar.y1Red"
-        v-bind:x2="bar.x"
-        v-bind:y2="bar.y2Red"
+      rect.error.fill.animated(
+        v-bind:x="bar.x"
+        v-bind:y="bar.greenHeight"
+        v-bind:width="chartData.dayWidth"
+        v-bind:height="bar.redHeight"
       )
-      //- text(x=0 y=0 font-family="mono" font-size=10 fill="black" transform="scale(0 -1) translate(10 -10)") Test
+      text.animated(
+        v-if="chartData.answerHeight * bar.correctCount > 5"
+        dy=5
+        font-size=5
+        fill="white"
+        text-anchor="middle"
+        v-bind:transform="textTransform(bar.x + chartData.dayWidth / 2 , bar.greenHeight)"
+      ) {{bar.correctCount}}
+      text(
+        dy=3.5
+        font-size=3.5
+        fill="white"
+        text-anchor="middle"
+        v-bind:transform="textTransform(bar.x + chartData.dayWidth / 2 , 0)"
+      ) {{bar.label}}
 </template>
 
 <script lang="coffee">
@@ -50,40 +80,62 @@ import _ from "lodash"
 return
   data : ->
     daysCharted : 7
-    dayWidth : 10
-    dayGap : 1
-    answerHeight : 10
+    dayGap : 2
+    grafWidth : 200
+    grafHeight : 100
+    margin : 10
     bronzeAnswers : 10
     silverAnswers : 50
     goldAnswers : 100
     userStatistics : {}
+  methods :
+    textTransform : (x, y) ->
+      "scale(1 -1) translate(#{x} #{-y})"
   computed :
     chartData : ->
-      labelFormat="D-M-Y"
-      submissions = @userStatistics.submissions
-      dayData = [@daysCharted-1..0].map (daysAgo) ->
+      keyFormat="D-M-Y"
+      submissions = @userStatistics?.submissions
+      dayData = [@daysCharted-1..0].map (daysAgo) =>
         date =
           moment()
           .subtract daysAgo, "days"
           .startOf("day")
-          .format(labelFormat)
+          .format(keyFormat)
+        label =
+          moment()
+          .subtract daysAgo, "days"
+          .startOf("day")
+          .calendar(null,
+            sameDay: @$t 'heute'
+            nextDay: @$t 'morgen'
+            nextWeek: 'dd'
+            lastDay: @$t 'gestern'
+            lastWeek: 'dd'
+            sameElse: @$t 'D_M'
+          )
         thatDay = submissions?.byDate?[date]
         correctCount = thatDay?.correct or 0
         falseCount = thatDay?.incorrect or 0
         totalCount = thatDay?.total or 0
-        {date, daysAgo, correctCount, falseCount, totalCount}
-      #dayData = @mockDayData
+        {date, label,daysAgo, correctCount, falseCount, totalCount}
       maxDayTotal = (_.maxBy dayData, "totalCount").totalCount
-      contentWidth = @daysCharted * @dayWidth
-      contentHeight = maxDayTotal * @answerHeight
-      bottomMargin = contentHeight * @dayGap / contentWidth
-      viewBox = "#{-.5*@dayGap} #{-bottomMargin} #{contentWidth+@dayGap} #{contentHeight+2*bottomMargin}"
-      coordinateTransform = "translate(0 #{maxDayTotal * 10}) scale(1 -1)"
+      maxAnswers = switch
+        when maxDayTotal < 1 then @bronzeAnswers - 1
+        when maxDayTotal < @bronzeAnswers then @bronzeAnswers + 2
+        when maxDayTotal < @silverAnswers then @silverAnswers + 2
+        when maxDayTotal < @goldAnswers then @goldAnswers + 2
+        else maxDayTotal + 2
+      dayWidth = @grafWidth/@daysCharted
+      answerHeight = @grafHeight/maxAnswers
+      viewBox = "#{-@margin} #{-@margin} #{@grafWidth+2*@margin} #{@grafHeight+2*@margin}"
+      coordinateTransform = "translate(0 100) scale(1 -1)"
       bars = dayData.map (day, index) =>
-        x : @dayWidth * (index + .5)
-        y1Red : @answerHeight * day.correctCount
-        y2Red : @answerHeight * (day.correctCount + day.falseCount)
-      return {viewBox, coordinateTransform, bars}
+        x : dayWidth * index + @dayGap/2
+        greenHeight : answerHeight * day.correctCount
+        redHeight : answerHeight * day.falseCount
+        correctCount : day.correctCount
+        label : day.label
+      return {viewBox, coordinateTransform, bars, dayWidth, answerHeight}
   meteor :
     $subscribe :
       userStatistics : -> [userId : @user?._id]
@@ -97,9 +149,8 @@ return
 </script>
 
 <style scoped lang="sass">
-.bar
-  transition: all 1s
-  stroke-width: 9
+.animated
+  transition: all .6s
 .nothing
   fill: DimGray
 .bronze
